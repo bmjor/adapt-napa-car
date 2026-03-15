@@ -93,6 +93,7 @@ static uni_error_t my_platform_on_device_ready(uni_hid_device_t* d) {
 }
 
 static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t* ctl) {
+
     static uint8_t leds = 0;
     static uint8_t enabled = true;
     static uni_controller_t prev = {0};
@@ -107,8 +108,8 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
     // Print device Id before dumping gamepad.
     // This could be very CPU intensive and might crash the ESP32.
     // Remove these 2 lines in production code.
-    //    logi("(%p), id=%d, \n", d, uni_hid_device_get_idx_for_instance(d));
-    //    uni_controller_dump(ctl);
+        //logi("(%p), id=%d, \n", d, uni_hid_device_get_idx_for_instance(d));
+        //uni_controller_dump(ctl);
 
     switch (ctl->klass) {
         case UNI_CONTROLLER_CLASS_GAMEPAD:
@@ -116,13 +117,28 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
 
             // Debugging
             // Axis ry: control rumble
+            
+            if (gp->buttons & BUTTON_A) {
+                logi("Button A pressed!\n");
+            }
+            if (gp->buttons & BUTTON_B) {
+                logi("Button B pressed!\n");
+            }
+            if (gp->buttons & BUTTON_X) {
+                logi("Button X pressed!\n");
+            }
+            if (gp->buttons & BUTTON_Y) {
+                logi("Button Y pressed!\n");
+            }
+                
             if ((gp->buttons & BUTTON_A) && d->report_parser.play_dual_rumble != NULL) {
                 d->report_parser.play_dual_rumble(d, 0 /* delayed start ms */, 250 /* duration ms */,
                                                   255 /* weak magnitude */, 0 /* strong magnitude */);
+            logi("Buttons pressed bitmask: 0x%08x\n", gp->buttons);
             }
             // Buttons: Control LEDs On/Off
             if ((gp->buttons & BUTTON_B) && d->report_parser.set_player_leds != NULL) {
-                d->report_parser.set_player_leds(d, leds++ & 0x0f);
+                d->report_parser.set_player_leds(d, leds++ & 0x0f); //bitmasking the first 4 bits to cycle through different LED patterns
             }
             // Axis: control RGB color
             if ((gp->buttons & BUTTON_X) && d->report_parser.set_lightbar_color != NULL) {

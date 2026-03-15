@@ -21,6 +21,8 @@
 struct uni_platform* get_my_platform(void);
 
 int app_main(void) {
+
+    
     // If you enable HCI Dump better to disable "Bluepad32 USB Console" from "idf.py menuconfig".
     // hci_dump_init(hci_dump_embedded_stdout_get_instance());
 
@@ -33,7 +35,7 @@ int app_main(void) {
 
     // Configure BTstack for ESP32 VHCI Controller
     btstack_init();
-
+    
     // Must be called before uni_init()
     uni_platform_set_custom(get_my_platform());
 
@@ -44,4 +46,5 @@ int app_main(void) {
     btstack_run_loop_execute();
 
     return 0;
+    
 }
