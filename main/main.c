@@ -15,6 +15,7 @@
 
 #include "sdkconfig.h"
 #include "arbitrator.h"
+#include "motor_driver.h"
 
 // Sanity check
 #ifndef CONFIG_BLUEPAD32_PLATFORM_CUSTOM
