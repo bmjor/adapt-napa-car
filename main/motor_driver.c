@@ -10,15 +10,18 @@
 #define rsteer 32
 #define lpwm 26
 #define lsteer 33
-#define r_en 14
-#define l_en 12
+#define r_en 14 // connected to all drivers' R_EN pins in parallel
+#define l_en 12 // connected to all drivers' L_EN pins in parallel
 #define targetangle 0
+#define deadband 50
 
 adc_oneshot_unit_handle_t adc1_handle;
 
-void debug_drive_pins() {
-    // Example function to set an LED brightness based on controller PWM value for debugging
-    //int brightness = (pwm_value + 255) / 2; // Map -255..255 to 0..255
+void debug_drive_pins(int pwm_value) {
+    // This function is for debugging purposes to test if the PWM output is working correctly based on the supervisor's input.
+    // It will set the rpwm pin to the given pwm_value and turn on an LED on GPIO 18 when the supervisor is actively controlling the car.
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_4, pwm_value);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_4);
 }
 
 void kill_motors() {
@@ -37,7 +40,7 @@ void enable_motors() {
     
 }
 
-void drive_motor(int xPos, int yPos) {
+void drive_motors(int xPos, int yPos) {
     /*
     if(xPos > 2048) {
     ledcWrite(lsteer, xPos-2048);  //Turn left
@@ -66,25 +69,73 @@ void drive_motor(int xPos, int yPos) {
     digitalWrite(lpwm, LOW);
   }
     */
-    // fix
-    if (gpio_get_level(buttonPin) == 0) { // Button pressed
-        if(yPos > 2048) {
-            // Forward
-            //gpio_set_level(rpwm, 1); 
-            gpio_set_level(lpwm, 0); 
-        } else if(yPos < 2048) {
-            // Reverse
-            gpio_set_level(rpwm, 0); 
-            //gpio_set_level(lpwm, 0); 
-        } else {
-            // Stop
-            gpio_set_level(rpwm, 0);
-            gpio_set_level(lpwm, 0);
-        }
+
+    // STEERING CONTROL
+    if (xPos > 2048 + deadband) {
+        // Turn left (Activate lsteer, disable rsteer)
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, xPos - (2048 + deadband));
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
+        
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 0); 
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+
+    } else if (xPos < 2048 - deadband) {
+        // Turn right (Activate rsteer, disable lsteer)
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, (2048 - deadband) - xPos);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+        
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, 0); 
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
+
     } else {
-        // Button not pressed, stop the motors
-        gpio_set_level(rpwm, 0);
-        gpio_set_level(lpwm, 0);
+        // Don't turn (Disable both)
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 0);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+        
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, 0);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
+    }
+    // THROTTLE CONTROL
+    if (gpio_get_level(buttonPin) == 0) { // Button is pressed (LOW)
+        if (yPos > 2048) {
+            // Forward (Activate rpwm with offset, disable lpwm)
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, (yPos - 2048) + 50);
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
+            
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 0); 
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3);
+
+            // comment out in production
+            //gpio_set_level(18, 1); // test bt controller input by lighting up an LED on GPIO 18 when supervisor is active
+        
+
+        } else if (yPos < 2048) {
+            // Reverse (Activate lpwm, disable rpwm)
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, 0); 
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
+            
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 2048 - yPos);
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3);
+            
+            //comment out in production
+            gpio_set_level(18, 0);
+
+        } else {
+            // Stop with idle power (rpwm at 50, lpwm off)
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, 50); 
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
+            
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 0); 
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3);
+        }
+
+    } else {
+        // Button not pressed -> Full Stop
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, 0);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
+        
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 0);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3);
     }
 }
 
@@ -105,7 +156,6 @@ void configure_pins() {
     ledcAttach(rsteer, 5000, 8);
     ledcAttach(lsteer, 5000, 8);
 }*/
-    
     gpio_reset_pin(18); // Example pin for debug LED
     gpio_set_direction(18, 2); // Set pin 18 as output
 
@@ -166,8 +216,45 @@ void configure_pins() {
         .duty           = 0,                     // Initial duty cycle (0 = completely off)
         .hpoint         = 0
     };
+    
     ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel2));
 
+    ledc_channel_config_t ledc_channel3 = {
+        .speed_mode     = LEDC_LOW_SPEED_MODE,
+        .channel        = LEDC_CHANNEL_2,        // Use a different channel for the second motor
+        .timer_sel      = LEDC_TIMER_0,          // Link to the same timer for same frequency
+        .intr_type      = LEDC_INTR_DISABLE,
+        .gpio_num       = rpwm,                // The pin you want to output PWM on
+        .duty           = 0,                     // Initial duty cycle (0 = completely off)
+        .hpoint         = 0
+    };
+
+    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel3));
+
+    ledc_channel_config_t ledc_channel4 = {
+        .speed_mode     = LEDC_LOW_SPEED_MODE,
+        .channel        = LEDC_CHANNEL_3,        // Use a different channel for the second motor
+        .timer_sel      = LEDC_TIMER_0,          // Link to the same timer for same frequency
+        .intr_type      = LEDC_INTR_DISABLE,
+        .gpio_num       = lpwm,                // The pin you want to output PWM on
+        .duty           = 0,                     // Initial duty cycle (0 = completely off)
+        .hpoint         = 0
+    };
+
+    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel4));
+
+    // remove later
+    ledc_channel_config_t ledc_channel5 = {
+        .speed_mode     = LEDC_LOW_SPEED_MODE,
+        .channel        = LEDC_CHANNEL_4,        // Use a different channel for the second motor
+        .timer_sel      = LEDC_TIMER_0,          // Link to the same timer for same frequency
+        .intr_type      = LEDC_INTR_DISABLE,
+        .gpio_num       = 18,                // Debug LED pin
+        .duty           = 0,                     // Initial duty cycle (0 = completely off)
+        .hpoint         = 0
+    };
+
+    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel5));
 
     // configure ADC
     adc_oneshot_unit_init_cfg_t init_config1 = {
@@ -182,5 +269,6 @@ void configure_pins() {
     };
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC_CHANNEL_0, &config)); // Configure steeringX (GPIO36), ADC channel 0
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC_CHANNEL_3, &config)); // Configure steeringY (GPIO39), ADC channel 3
+
 
 }

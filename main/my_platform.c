@@ -10,6 +10,7 @@ volatile int supervisor_x = 0;
 volatile int supervisor_y = 0;
 volatile bool supervisor_hard_override = false;
 volatile bool supervisor_emergency_stop = false; 
+volatile bool controller_connected = false;
 
 // Custom "instance"
 typedef struct my_platform_instance_s {
@@ -83,10 +84,13 @@ static uni_error_t my_platform_on_device_discovered(bd_addr_t addr, const char* 
 
 static void my_platform_on_device_connected(uni_hid_device_t* d) {
     logi("custom: device connected: %p\n", d);
+    controller_connected = true; // Set the flag to indicate that the controller is connected
+
 }
 
 static void my_platform_on_device_disconnected(uni_hid_device_t* d) {
     logi("custom: device disconnected: %p\n", d);
+    controller_connected = false; // Set the flag to indicate that the controller is disconnected
 }
 
 static uni_error_t my_platform_on_device_ready(uni_hid_device_t* d) {
@@ -127,12 +131,11 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
             // Note: You may need to invert the axis by multiplying by -1 depending on motor wiring.
 
             supervisor_x = (gp->axis_rx * 4) + 2048; 
-            supervisor_y = (gp->axis_ry * 4) + 2048;
+            supervisor_y = (gp->axis_ry * 4)*-1 + 2048; // Invert Y axis for typical joystick behavior (up is negative, down is positive)
 
             // --- ARBITRATOR: SUPERVISOR OVERRIDE LOGIC ---
             // If the Right Trigger is held down (value > 0), the supervisor takes control
             if (gp->brake > 0) {
-                logi("Supervisor override active!\n");
                 supervisor_hard_override = true;
                 
             } else {
@@ -143,20 +146,20 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
             //  Emergency Stop: If button Y is pressed, engage emergency stop
 
             if (gp->buttons & BUTTON_B) {
-                logi("Emergency Stop Engaged!\n");
+                //logi("Emergency Stop Engaged!\n");
                 supervisor_emergency_stop = true;
             }
 
             // Emergency Stop Disengage: If both buttons X and Y are pressed together, disengage the emergency stop latch
             if ((gp->buttons & BUTTON_X) && (gp->buttons & BUTTON_Y)) {
-                logi("Emergency Stop Disengaged!\n");
+                //logi("Emergency Stop Disengaged!\n");
                 supervisor_emergency_stop = false;
             }
             
             // Debugging
             // Axis ry: control rumble
             
-            if (gp->buttons & BUTTON_A) {
+            /*if (gp->buttons & BUTTON_A) {
                 logi("Button A pressed!\n");
             }
             if (gp->buttons & BUTTON_B) {
@@ -169,9 +172,7 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
                 logi("Button Y pressed!\n");
             }
                 
-            if ((gp->buttons & BUTTON_A) && d->report_parser.play_dual_rumble != NULL) {
-                d->report_parser.play_dual_rumble(d, 0 /* delayed start ms */, 250 /* duration ms */,
-                                                  255 /* weak magnitude */, 0 /* strong magnitude */);
+            
             logi("Buttons pressed bitmask: 0x%08x\n", gp->buttons);
             }
             // Buttons: Control LEDs On/Off
@@ -196,9 +197,11 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
                 logi("*** Start scanning\n");
                 uni_bt_start_scanning_and_autoconnect_safe();
                 enabled = true;
-            }
+            }*/
+            
             break;
         default:
+            
             break;
     }
 }
