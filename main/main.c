@@ -3,6 +3,9 @@
 
 #include <stdlib.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 #include <btstack_port_esp32.h>
 #include <btstack_run_loop.h>
 #include <btstack_stdio_esp32.h>
@@ -11,11 +14,13 @@
 #include <uni.h>
 
 #include "sdkconfig.h"
+#include "arbitrator.h"
 
 // Sanity check
 #ifndef CONFIG_BLUEPAD32_PLATFORM_CUSTOM
 #error "Must use BLUEPAD32_PLATFORM_CUSTOM"
 #endif
+
 
 // Defined in my_platform.c
 struct uni_platform* get_my_platform(void);
@@ -42,8 +47,14 @@ int app_main(void) {
     // Init Bluepad32.
     uni_init(0 /* argc */, NULL /* argv */);
 
-    // Does not return.
-    btstack_run_loop_execute();
+    // temp: initialize pins for debugging
+    configure_pins();
+
+    // Creates and assigns motor control task to core 1, so that it doesn't interfere with Bluetooth on core 0
+    xTaskCreatePinnedToCore(car_control_task, "car_control", 4096, NULL, 5, NULL, 1); 
+
+    // Does not return
+    btstack_run_loop_execute(); 
 
     return 0;
     

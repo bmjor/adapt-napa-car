@@ -5,6 +5,11 @@
 
 #include <uni.h>
 
+// Shared Supervisor State Variables
+volatile int supervisor_left_pwm = 0;
+volatile int supervisor_right_pwm = 0;
+volatile bool supervisor_active = false;
+
 // Custom "instance"
 typedef struct my_platform_instance_s {
     uni_gamepad_seat_t gamepad_seat;  // which "seat" is being used
@@ -115,6 +120,26 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
         case UNI_CONTROLLER_CLASS_GAMEPAD:
             gp = &ctl->gamepad;
 
+            // --- ARBITRATOR: SUPERVISOR OVERRIDE LOGIC ---
+            // If the Right Trigger is held down (value > 0), the supervisor takes control
+            if (gp->brake > 0) {
+                supervisor_active = true;
+                
+                // Bluepad32 axis values range from -512 to +511. 
+                // We map this to a standard 8-bit PWM range (-255 to 255).
+                // Note: You may need to invert the axis by multiplying by -1 depending on motor wiring.
+
+                //change based on edwin's mapping
+                supervisor_left_pwm = (gp->axis_y * 255) / 512; 
+                supervisor_right_pwm = (gp->axis_ry * 255) / 512;
+
+            } else {
+                // Trigger released: Give control back to the arcade joystick
+                supervisor_active = false;
+                supervisor_left_pwm = 0;
+                supervisor_right_pwm = 0;
+            }
+            
             // Debugging
             // Axis ry: control rumble
             
