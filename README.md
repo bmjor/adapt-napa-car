@@ -2,7 +2,7 @@
 
 A custom embedded control system for a modified ride-on car for the NAPA Center. 
 
-This project replaces the factory electronics with an ESP32 microcontroller running a FreeRTOS architecture. It utilizes the **Bluepad32** library to allow physical therapists to safely supervise and override the child's driving using a standard Bluetooth gamepad.
+This project replaces the factory electronics(JR1958RX-2S) with an ESP32 microcontroller running a FreeRTOS architecture. It utilizes the Bluepad32 library to allow physical therapists to safely supervise and override the child's driving using a standard Bluetooth gamepad.
 
 ## System Architecture
 
