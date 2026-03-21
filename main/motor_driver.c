@@ -3,25 +3,19 @@
 #include "driver/ledc.h"
 #include "esp_adc/adc_oneshot.h"
 
-#define buttonPin 2 // Pin connected to button switch
-#define steeringX 36
-#define steeringY 39
-#define rpwm 25
-#define rsteer 32
-#define lpwm 26
-#define lsteer 33
-#define r_en 14 // connected to all drivers' R_EN pins in parallel
-#define l_en 12 // connected to all drivers' L_EN pins in parallel
-#define targetangle 0
-#define deadband 50
 
 adc_oneshot_unit_handle_t adc1_handle;
+
 
 void debug_drive_pins(int pwm_value) {
     // This function is for debugging purposes to test if the PWM output is working correctly based on the supervisor's input.
     // It will set the rpwm pin to the given pwm_value and turn on an LED on GPIO 18 when the supervisor is actively controlling the car.
     ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_4, pwm_value);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_4);
+}
+
+bool is_gas_pedal_pressed() {
+    return gpio_get_level(buttonPin) == 0;
 }
 
 void kill_motors() {
@@ -95,46 +89,33 @@ void drive_motors(int xPos, int yPos) {
         ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, 0);
         ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
     }
+
     // THROTTLE CONTROL
-    if (gpio_get_level(buttonPin) == 0) { // Button is pressed (LOW)
-        if (yPos > 2048) {
-            // Forward (Activate rpwm with offset, disable lpwm)
-            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, (yPos - 2048) + 50);
-            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
-            
-            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 0); 
-            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3);
-
-            // comment out in production
-            //gpio_set_level(18, 1); // test bt controller input by lighting up an LED on GPIO 18 when supervisor is active
-        
-
-        } else if (yPos < 2048) {
-            // Reverse (Activate lpwm, disable rpwm)
-            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, 0); 
-            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
-            
-            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 2048 - yPos);
-            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3);
-            
-            //comment out in production
-            gpio_set_level(18, 0);
-
-        } else {
-            // Stop with idle power (rpwm at 50, lpwm off)
-            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, 50); 
-            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
-            
-            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 0); 
-            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3);
-        }
-
-    } else {
-        // Button not pressed -> Full Stop
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, 0);
+    // Note: button logic moved to arbitrator.c, so this function only focuses on controlling the motors based on the given xPos and yPos values, which are processed supervisor commands.
+    if (yPos > 2048) {
+        printf("Forward!\n");
+        // Forward (Activate rpwm with offset, disable lpwm)
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, yPos - 2048);
         ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
         
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 0);
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 0); 
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3);
+    } else if (yPos < 2048) {
+        printf("Reverse!\n");
+        // Reverse (Activate lpwm, disable rpwm)
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, 0); 
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
+        
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 2048 - yPos);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3);
+
+    } else {
+        // Stop with idle power (rpwm at forwardOffset, lpwm off)
+        printf("Idle\n");
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, 0); 
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
+        
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 0); 
         ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3);
     }
 }
@@ -175,9 +156,15 @@ void configure_pins() {
     gpio_set_direction(l_en, 2);
 
     // Equivalent to pinMode(buttonPin, INPUT_PULLUP)
-    gpio_reset_pin(buttonPin);
-    gpio_input_enable(buttonPin); 
-    gpio_pullup_en(buttonPin); // Enable internal pull-up resistor
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << buttonPin),   // Select GPIO pin for the button
+        .mode = GPIO_MODE_INPUT,                  // Set as input
+        .pull_up_en = GPIO_PULLUP_ENABLE,     // Enable internal pull-up
+        .pull_down_en = GPIO_PULLDOWN_DISABLE, // Disable pull-down
+        .intr_type = GPIO_INTR_DISABLE        // Disable interrupts
+    };
+
+    gpio_config(&io_conf);
 
     // Set enable pins high to turn on motor drivers
     gpio_set_level(r_en, 1);
@@ -257,6 +244,9 @@ void configure_pins() {
     ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel5));
 
     // configure ADC
+
+
+
     adc_oneshot_unit_init_cfg_t init_config1 = {
         .unit_id = ADC_UNIT_1,
         .ulp_mode = ADC_ULP_MODE_DISABLE,

@@ -1,6 +1,5 @@
 #include "arbitrator.h"
 
-
 extern adc_oneshot_unit_handle_t adc1_handle; // Declare the ADC handle as extern to use it in this file
 
 // Slew Rate Limiter For Smooth Acceleration/Deceleration
@@ -52,10 +51,10 @@ void car_control_task(void *pvParameters) {
         // Read the ADC values for steeringX and steeringY and store them in child_x and child_y
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ADC_CHANNEL_0, &child_x));
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ADC_CHANNEL_3, &child_y));
-
+        
         // for testing when joystick is not wired
-        //child_x = 2048; 
-        //child_y = 2048;
+        child_x = 2048; 
+        child_y = 1048;
         
         // Determine if the supervisor is actively moving the joystick (soft override) even if the trigger is not pulled
         bool supervisor_soft_override = (sup_cmd.x > 2248 || sup_cmd.x < 1848 || 
@@ -67,6 +66,7 @@ void car_control_task(void *pvParameters) {
         if (sup_cmd.emergency_stop) {
             // PRIORITY 0: Emergency Stop. If engaged, it overrides EVERYTHING and forces the car to stop immediately.
             // Physically kill power to motor drivers with the enable pins
+            printf("EMERGENCY STOP ENGAGED!\n");
             kill_motors();
             // Zero out the PWM for extra safety
             current_motor_x = 2048;
@@ -80,12 +80,14 @@ void car_control_task(void *pvParameters) {
             if (sup_cmd.hard_override) {
                 // PRIORITY 1: Trigger is pulled. Supervisor takes FULL control. 
                 // Even if the supervisor joystick is centered, it will force the car to stop.
+                printf("Hard Override Engaged!\n");
                 target_motor_x = sup_cmd.x;
                 target_motor_y = sup_cmd.y;
 
             } else if (supervisor_soft_override) {
                 // PRIORITY 2: Trigger is NOT pulled, but supervisor is moving the joystick.
                 // Override the kid with the supervisor's movement.
+                printf("Soft Override Engaged!\n");
                 target_motor_x = sup_cmd.x;
                 target_motor_y = sup_cmd.y;
 
@@ -94,15 +96,22 @@ void car_control_task(void *pvParameters) {
                 if (child_x < 15 || child_x > 4081 || child_y < 15 || child_y > 4081) {
                     // If the ADC reads an impossible extreme, a wire is unplugged or broken.
                     // Force all motors to stop immediately
+                    printf("ADC Reading Out of Bounds! Stopping motors for safety\n");
                     current_motor_x = 2048;
                     current_motor_y = 2048;
                     target_motor_x = 2048;
                     target_motor_y = 2048;
-                    
-                    //kill_motors();
-                    ///printf("HARDWARE FAULT DETECTED: ADC reading out of bounds! child_x: %d, child_y: %d\n", child_x, child_y);
-                    //vTaskDelay(pdMS_TO_TICKS(100)); // Delay to avoid busy looping in case of hardware fault
-                    //continue; // Skip the rest of the loop to avoid using invalid values
+                }
+
+                if (!is_gas_pedal_pressed()) {
+                    // If the gas pedal is not pressed, ignore the kid's joystick input and keep the car stationary
+                    printf("Gas Pedal Not Pressed! Ignoring kid's joystick input\n");
+                    child_x = 2048;
+                    child_y = 2048;
+                }
+                else if (child_y >= 2048){
+                    child_y += forwardOffset;
+                    printf("Gas Pedal Pressed! Child Y with forward offset: %d\n", child_y);
                 }
                 target_motor_x = child_x;
                 target_motor_y = child_y;
@@ -124,7 +133,7 @@ void car_control_task(void *pvParameters) {
         // remove later
         //debug_drive_pins(target_motor_x);
         //printf("Output: (%d, %d) | Supervisor: (%d, %d) | Child: (%d, %d) | Emergency Stop: %d\n", 
-         //       current_motor_x, current_motor_y, sup_cmd.x, sup_cmd.y, child_x, child_y, sup_cmd.emergency_stop);
+                //current_motor_x, current_motor_y, sup_cmd.x, sup_cmd.y, child_x, child_y, sup_cmd.emergency_stop);
 
         vTaskDelay(pdMS_TO_TICKS(10)); // Delay every 10ms to let other tasks run and to avoid hogging the CPU
     }

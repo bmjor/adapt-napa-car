@@ -111,8 +111,6 @@ static uni_error_t my_platform_on_device_ready(uni_hid_device_t* d) {
 
 static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t* ctl) {
 
-    static uint8_t leds = 0;
-    static uint8_t enabled = true;
     static uni_controller_t prev = {0};
     uni_gamepad_t* gp;
 
