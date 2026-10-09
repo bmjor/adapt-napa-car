@@ -14,7 +14,7 @@ void debug_drive_pins(int pwm_value) {
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_4);
 }
 
-bool is_gas_pedal_pressed() {
+bool    is_gas_pedal_pressed() {
     return gpio_get_level(buttonPin) == 0;
 }
 
@@ -113,7 +113,7 @@ void drive_motors(int xPos, int yPos) {
 
     } else {
         // Stop with idle power (rpwm at forwardOffset, lpwm off)
-        printf("Idle\n");
+        //printf("Idle\n");
         ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, 0); 
         ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
         
@@ -261,6 +261,5 @@ void configure_pins() {
     };
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC_CHANNEL_0, &config)); // Configure steeringX (GPIO36), ADC channel 0
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC_CHANNEL_3, &config)); // Configure steeringY (GPIO39), ADC channel 3
-
 
 }

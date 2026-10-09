@@ -53,8 +53,9 @@ void car_control_task(void *pvParameters) {
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ADC_CHANNEL_3, &child_y));
         
         // for testing when joystick is not wired
+        printf("ADC Readings - Child X: %d | Child Y: %d\n", child_x, child_y);
         //child_x = 2048; 
-        child_y = 1048;
+        //child_y = 2048;
         
         // Determine if the supervisor is actively moving the joystick (soft override) even if the trigger is not pulled
         bool supervisor_soft_override = (sup_cmd.x > 2248 || sup_cmd.x < 1848 || 
@@ -94,10 +95,10 @@ void car_control_task(void *pvParameters) {
             } else {
                 // PRIORITY 3: Supervisor is doing nothing. Kid has full control.
                 // Note: when testing with potentiometer, full range was met. Check if this applies for joystick
-                if (child_x < 15 || child_x > 4081 || child_y < 15 || child_y > 4081) {
+                if (child_x < -1 || child_x > 4096 || child_y < -1 || child_y > 4096) {
                     // If the ADC reads an impossible extreme, a wire is unplugged or broken.
                     // Force all motors to stop immediately
-                    printf("ADC Reading Out of Bounds! Stopping motors for safety. y value: %d | x value: %d\n", child_y, child_x);
+                    printf("ADC Reading Out of Bounds! Stopping motors for safety. y value: %d | x value: %d\n", child_x, child_y);
                     current_motor_x = 2048;
                     current_motor_y = 2048;
                     target_motor_x = 2048;
@@ -110,9 +111,9 @@ void car_control_task(void *pvParameters) {
                         child_x = 2048;
                         child_y = 2048;
                     }
-                    else if (child_y >= 2048){
+                    else if (child_y >= 1800){
                         child_y += forwardOffset;
-                        //printf("Gas Pedal Pressed! Child Y with forward offset: %d\n", child_y);
+                        printf("Gas Pedal Pressed! Child Y with forward offset: %d\n", child_y);
                     }
                     target_motor_x = child_x;
                     target_motor_y = child_y;

@@ -3,9 +3,9 @@
 
 #include "stdbool.h"
 
-#define buttonPin 14 // Pin connected to button switch
-#define steeringX 36 
-#define steeringY 39
+#define buttonPin 15 // Pin connected to button switch
+#define steeringX 36 // originally 36, 35 for testing 
+#define steeringY 39 // originally 39, 34 for testing
 #define rpwm 25
 #define rsteer 32
 #define lpwm 26
@@ -14,7 +14,7 @@
 #define l_en 12 // connected to all drivers' L_EN pins in parallel
 #define targetangle 0
 #define deadband 50
-#define forwardOffset 100 // Offset so that when the child presses the gas pedal, the car moves forward
+#define forwardOffset 1000 // Offset so that when the child presses the gas pedal, the car moves forward
 
 
 // Function prototypes for motor driver functions

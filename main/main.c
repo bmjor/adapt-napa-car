@@ -22,10 +22,12 @@
 #error "Must use BLUEPAD32_PLATFORM_CUSTOM"
 #endif
 
+
 QueueHandle_t supervisor_queue;
 
 // Defined in my_platform.c
 struct uni_platform* get_my_platform(void);
+
 
 int app_main(void) {
 
