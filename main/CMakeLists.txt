@@ -1,4 +1,4 @@
-set(srcs "main.c" "my_platform.c" "arbitrator.c" "motor_driver.c")
+set(srcs "main.c" "my_platform.c")
 
 set(requires "bluepad32" "btstack" "esp_adc")
 
