@@ -18,6 +18,7 @@ static int16_t apply_slew_limit(int16_t target_val, int16_t current_val, int16_t
     return current_val + (int16_t)delta;
 }
 
+
 // Freertos task that continuously reads the supervisor state and controls the car accordingly
 void car_control_task(void *pvParameters) {
     int16_t current_motor_x = 2048; // Start at neutral position

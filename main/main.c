@@ -14,8 +14,8 @@
 #include <uni.h>
 
 #include "sdkconfig.h"
-#include "arbitrator.h"
 #include "motor_driver.h"
+#include "drive.h"
 
 // Sanity check
 #ifndef CONFIG_BLUEPAD32_PLATFORM_CUSTOM
@@ -31,8 +31,8 @@ struct uni_platform* get_my_platform(void);
 
 int app_main(void) {
 
-    
-    // If you enable HCI Dump better to disable "Bluepad32 USB Console" from "idf.py menuconfig".
+#if WITH_BT_CONTROLLER
+        // If you enable HCI Dump better to disable "Bluepad32 USB Console" from "idf.py menuconfig".
     // hci_dump_init(hci_dump_embedded_stdout_get_instance());
 
     // Don't use BTstack buffered UART. It conflicts with the console.
@@ -51,18 +51,15 @@ int app_main(void) {
     // Init Bluepad32.
     uni_init(0 /* argc */, NULL /* argv */);
 
-    // temp: initialize pins for debugging
-    configure_pins();
-
-    // Create the supervisor command queue
-    supervisor_queue = xQueueCreate(1, sizeof(supervisor_cmd_t));
-
-    // Creates and assigns motor control task to core 1, so that it doesn't interfere with Bluetooth on core 0
-    xTaskCreatePinnedToCore(car_control_task, "car_control", 4096, NULL, 5, NULL, 1); 
+    // Start driving task
+    setup_driving();
 
     // Does not return
     btstack_run_loop_execute(); 
-
+#else
+    setup_driving();
+    // 
+#endif
     return 0;
     
 }
