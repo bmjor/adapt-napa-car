@@ -2,17 +2,8 @@
 // Need help? https://tinyurl.com/bluepad32-help
 
 #include <string.h>
-#include "arbitrator.h"
 #include <uni.h>
-
-// Shared Supervisor State Variables
-static supervisor_cmd_t current_cmd = {
-    .x = 2048,
-    .y = 2048,
-    .hard_override = false,
-    .emergency_stop = false,
-    .is_connected = false
-};
+#include "drive.h"
 
 // Custom "instance"
 typedef struct my_platform_instance_s {
@@ -86,26 +77,21 @@ static uni_error_t my_platform_on_device_discovered(bd_addr_t addr, const char* 
 
 static void my_platform_on_device_connected(uni_hid_device_t* d) {
     logi("custom: device connected: %p\n", d);
-    current_cmd.is_connected = true; // Set the flag to indicate that the controller is connected
-    xQueueOverwrite(supervisor_queue, &current_cmd); // Send the updated command to the queue
 }
 
 static void my_platform_on_device_disconnected(uni_hid_device_t* d) {
     logi("custom: device disconnected: %p\n", d);
-    current_cmd.is_connected = false; // Set the flag to indicate that the controller is disconnected
-
-    current_cmd.x = 2048;
-    current_cmd.y = 2048;
-    current_cmd.hard_override = false;
-    xQueueOverwrite(supervisor_queue, &current_cmd); // Send the updated command to the queue
+    drive_on_supervisor_disconnect();
 }
 
 static uni_error_t my_platform_on_device_ready(uni_hid_device_t* d) {
     logi("custom: device ready: %p\n", d);
     my_platform_instance_t* ins = get_my_platform_instance(d);
     ins->gamepad_seat = GAMEPAD_SEAT_A;
-
     trigger_event_on_gamepad(d);
+
+    drive_set_supervisor_connected(); // set connected = true;
+    
     return UNI_ERROR_SUCCESS;
 }
 
@@ -125,94 +111,45 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
     // Remove these 2 lines in production code.
         //logi("(%p), id=%d, \n", d, uni_hid_device_get_idx_for_instance(d));
         //uni_controller_dump(ctl);
-
     switch (ctl->klass) {
-        case UNI_CONTROLLER_CLASS_GAMEPAD:
-            gp = &ctl->gamepad;
-
+        case UNI_CONTROLLER_CLASS_GAMEPAD: {
+            gp = &ctl->gamepad; 
             // Bluepad32 axis values range from -512 to +511. 
-            // We map this to a standard 12-bit PWM range (-2048 to 2047) and shift so that 2048 is the center.
-            // 2048 / 512 = 4, so we multiply the axis values by 4 to scale them to the new range.
-            // Note: You may need to invert the axis by multiplying by -1 depending on motor wiring.
+            int16_t steering = (int32_t)gp->axis_rx * 100 / 511;
+            int16_t thrust = (int32_t)gp->axis_y * 100 * -1 / 511;
 
-            current_cmd.x = (gp->axis_rx * 4) + 2048; 
-            current_cmd.y = (gp->axis_ry * 4)*-1 + 2048; // Invert Y axis for typical joystick behavior (up is negative, down is positive)
+            drive_set_supervisor_speed(steering, thrust);
 
-            // --- ARBITRATOR: SUPERVISOR OVERRIDE LOGIC ---
-            // If the Right Trigger is held down (value > 0), the supervisor takes control
-            if (gp->brake > 0) {
-                current_cmd.hard_override = true;
+            // If either trigger is held down (value > 0), the supervisor takes control
+            if (gp->brake > 0 || gp->throttle > 0) {
+                drive_set_supervisor_override(true);
                 
             } else {
-                // Trigger released: Give control back to the arcade joystick
-                current_cmd.hard_override = false;
+                // Trigger released: Give control back to the joystick
+                drive_set_supervisor_override(false);
             }
             
             //  Emergency Stop: If button Y is pressed, engage emergency stop
-
-            if (gp->buttons & BUTTON_B) {
-                //logi("Emergency Stop Engaged!\n");
-                current_cmd.emergency_stop = true;
-            }
-
-            // Emergency Stop Disengage: If both buttons X and Y are pressed together, disengage the emergency stop latch
-            if ((gp->buttons & BUTTON_X) && (gp->buttons & BUTTON_Y)) {
-                //logi("Emergency Stop Disengaged!\n");
-                current_cmd.emergency_stop = false;
-            }
-            
-            if (current_cmd.emergency_stop && (d->report_parser.set_lightbar_color != NULL)) {
-                d->report_parser.set_lightbar_color(d, 255, 0, 0); // Set lightbar to red to indicate emergency stop is engaged
-            } else {
-                d->report_parser.set_lightbar_color(d, 0, 0, 255); // Set lightbar to blue to indicate normal operation
-            }
-
-            xQueueOverwrite(supervisor_queue, &current_cmd); // Send the updated command to the queue
-
-            // Debugging
-            // Axis ry: control rumble
-            
-            /*if (gp->buttons & BUTTON_A) {
-                logi("Button A pressed!\n");
-            }
-            if (gp->buttons & BUTTON_B) {
-                logi("Button B pressed!\n");
-            }
-            if (gp->buttons & BUTTON_X) {
-                logi("Button X pressed!\n");
-            }
             if (gp->buttons & BUTTON_Y) {
-                logi("Button Y pressed!\n");
-            }
-                
-            
-            logi("Buttons pressed bitmask: 0x%08x\n", gp->buttons);
-            }
-            // Buttons: Control LEDs On/Off
-            if ((gp->buttons & BUTTON_B) && d->report_parser.set_player_leds != NULL) {
-                d->report_parser.set_player_leds(d, leds++ & 0x0f); //bitmasking the first 4 bits to cycle through different LED patterns
-            }
-            // Axis: control RGB color
-            if ((gp->buttons & BUTTON_X) && d->report_parser.set_lightbar_color != NULL) {
-                uint8_t r = (gp->axis_x * 256) / 512;
-                uint8_t g = (gp->axis_y * 256) / 512;
-                uint8_t b = (gp->axis_rx * 256) / 512;
-                d->report_parser.set_lightbar_color(d, r, g, b);
+                logi("Emergency Stop Engaged!\n");
+                drive_set_supervisor_emergency_stop(true);
             }
 
-            // Toggle Bluetooth connections
-            if ((gp->buttons & BUTTON_SHOULDER_L) && enabled) {
-                logi("*** Stop scanning\n");
-                uni_bt_stop_scanning_safe();
-                enabled = false;
+            // Emergency Stop Disengage: If button A is pressed, disengage emergency stop
+            if (gp->buttons & BUTTON_A) {
+                logi("Emergency Stop Disengaged!\n");
+                drive_set_supervisor_emergency_stop(false);
             }
-            if ((gp->buttons & BUTTON_SHOULDER_R) && !enabled) {
-                logi("*** Start scanning\n");
-                uni_bt_start_scanning_and_autoconnect_safe();
-                enabled = true;
-            }*/
+            
+            // TEST TO SEE IF IT WORKS ON GAMESIR CONTROLLER
+            // if (current_cmd.emergency_stop && (d->report_parser.set_lightbar_color != NULL)) {
+            //     d->report_parser.set_lightbar_color(d, 255, 0, 0); // Set lightbar to red to indicate emergency stop is engaged
+            // } else {
+            //     d->report_parser.set_lightbar_color(d, 0, 0, 255); // Set lightbar to blue to indicate normal operation
+            // }
             
             break;
+        }
         default:
             
             break;
@@ -260,7 +197,7 @@ static my_platform_instance_t* get_my_platform_instance(uni_hid_device_t* d) {
 }
 
 static void trigger_event_on_gamepad(uni_hid_device_t* d) {
-    my_platform_instance_t* ins = get_my_platform_instance(d);
+    //my_platform_instance_t* ins = get_my_platform_instance(d);
 
     if (d->report_parser.play_dual_rumble != NULL) {
         d->report_parser.play_dual_rumble(d, 0 /* delayed start ms */, 150 /* duration ms */, 128 /* weak magnitude */,
