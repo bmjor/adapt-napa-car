@@ -16,6 +16,7 @@ On a standard controller, the left joystick maps to forwards/backwards motion(re
 * **Motor Drivers:** 2x BTS7960 43A High-Power H-Bridges (1x Steering, 1x Rear Drive connected in parallel to LEDC channels).
 * **Child Inputs:** Analog Potentiometer Joystick (Steering) & Button (Horn).
 * **Supervisor Input:** Any standard Bluetooth Gamepad (via Bluepad32).
+<img width="904" height="898" alt="Generalized Circuit Diagram - NAPA(1)" src="https://github.com/user-attachments/assets/042070f9-d519-44fa-aae3-576234ff7082" />
 
 ## Build and Flash
 
