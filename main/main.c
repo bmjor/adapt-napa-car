@@ -14,7 +14,6 @@
 #include <uni.h>
 
 #include "sdkconfig.h"
-#include "motor_driver.h"
 #include "drive.h"
 
 // Sanity check
