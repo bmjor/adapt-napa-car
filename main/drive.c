@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "freertos/FreeRTOS.h"
-#include "freertos/task.h"m
+#include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_err.h"
 #include "esp_timer.h"
@@ -252,7 +252,7 @@ float compute_next_speed(float current, float target, float delta) {
             return FORWARD_SHUTOFF_THRESOLD;
         }
         else if(current < 0) {
-            float slowdown_rate = current > 50 ? 0.08 : 0.04;
+            float slowdown_rate = current > -50 ? 0.08 : 0.04;
             return current + delta * slowdown_rate;
         }
         else {
